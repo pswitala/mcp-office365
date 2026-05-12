@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+.claude
+.claude/*
+plans
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets (if any added later)
+.env
+.env.*
