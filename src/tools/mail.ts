@@ -8,6 +8,8 @@ import {
   createDraft,
   moveMessage,
   listFolders,
+  listFolderTree,
+  findFolder,
 } from "../graph/mail.js";
 
 export const mailToolDefinitions = [
@@ -167,6 +169,55 @@ export const mailToolDefinitions = [
     handler: async (args: { alias: string }) => {
       const folders = await listFolders(args.alias);
       return { content: [{ type: "text" as const, text: JSON.stringify(folders, null, 2) }] };
+    },
+  },
+
+  {
+    name: "list_folders_tree",
+    description:
+      "List mail folders as a nested tree showing subfolders. Use depth=1 for top-level folders plus their immediate children, depth=2 to also include grandchildren. Each folder includes id, displayName, unreadItemCount, totalItemCount, and a children array.",
+    schema: z.object({
+      alias: z.string().describe("Mailbox alias"),
+      depth: z
+        .number()
+        .int()
+        .min(1)
+        .max(2)
+        .optional()
+        .default(1)
+        .describe("Subfolder depth to fetch: 1 = immediate children, 2 = two levels deep (default: 1)"),
+    }),
+    handler: async (args: { alias: string; depth?: number }) => {
+      const depth = (args.depth ?? 1) as 1 | 2;
+      const tree = await listFolderTree(args.alias, depth);
+      return { content: [{ type: "text" as const, text: JSON.stringify(tree, null, 2) }] };
+    },
+  },
+
+  {
+    name: "find_folder",
+    description:
+      "Search for a mail folder by name using case-insensitive partial matching. Returns matching folders with their full path (e.g. 'Inbox > LinkedIn'). Use the returned folder id with list_messages to read its emails.",
+    schema: z.object({
+      alias: z.string().describe("Mailbox alias"),
+      name: z.string().describe("Folder name to search for (partial match, case-insensitive)"),
+      depth: z
+        .number()
+        .int()
+        .min(1)
+        .max(2)
+        .optional()
+        .default(2)
+        .describe("How many folder levels to search: 1 = top-level + immediate children, 2 = two levels deep (default: 2)"),
+    }),
+    handler: async (args: { alias: string; name: string; depth?: number }) => {
+      const depth = (args.depth ?? 2) as 1 | 2;
+      const matches = await findFolder(args.alias, args.name, depth);
+      const text =
+        matches.length > 0
+          ? JSON.stringify(matches, null, 2)
+          : `No folders matching "${args.name}" found within depth ${depth}. Try a broader search term or use list_folders_tree to browse the full hierarchy.`;
+      return { content: [{ type: "text" as const, text }] };
     },
   },
 ] as const;

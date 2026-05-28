@@ -156,3 +156,75 @@ export async function listFolders(alias: string): Promise<Array<{ id: string; di
   );
   return res.value;
 }
+
+export interface FolderNode {
+  id: string;
+  displayName: string;
+  unreadItemCount: number;
+  totalItemCount: number;
+  children: FolderNode[];
+}
+
+export interface FolderMatch {
+  id: string;
+  displayName: string;
+  unreadItemCount: number;
+  totalItemCount: number;
+  path: string;
+}
+
+const FOLDER_SELECT = "id,displayName,unreadItemCount,totalItemCount";
+
+async function getChildFolders(alias: string, folderId: string): Promise<Omit<FolderNode, "children">[]> {
+  const res = await graphGet<{ value: Omit<FolderNode, "children">[] }>(
+    alias,
+    `/me/mailFolders/${folderId}/childFolders?$select=${FOLDER_SELECT}&$top=50`
+  );
+  return res.value;
+}
+
+export async function listFolderTree(alias: string, depth: 1 | 2 = 1): Promise<FolderNode[]> {
+  const res = await graphGet<{ value: Omit<FolderNode, "children">[] }>(
+    alias,
+    `/me/mailFolders?$select=${FOLDER_SELECT}&$top=50`
+  );
+
+  return Promise.all(
+    res.value.map(async (folder): Promise<FolderNode> => {
+      const depth1 = await getChildFolders(alias, folder.id);
+      let childNodes: FolderNode[];
+
+      if (depth >= 2) {
+        childNodes = await Promise.all(
+          depth1.map(async (child): Promise<FolderNode> => {
+            const depth2 = await getChildFolders(alias, child.id);
+            return { ...child, children: depth2.map((c) => ({ ...c, children: [] })) };
+          })
+        );
+      } else {
+        childNodes = depth1.map((c) => ({ ...c, children: [] }));
+      }
+
+      return { ...folder, children: childNodes };
+    })
+  );
+}
+
+export async function findFolder(alias: string, name: string, depth: 1 | 2 = 2): Promise<FolderMatch[]> {
+  const tree = await listFolderTree(alias, depth);
+  const needle = name.toLowerCase();
+  const matches: FolderMatch[] = [];
+
+  function walk(nodes: FolderNode[], parentPath: string) {
+    for (const node of nodes) {
+      const path = parentPath ? `${parentPath} > ${node.displayName}` : node.displayName;
+      if (node.displayName.toLowerCase().includes(needle)) {
+        matches.push({ id: node.id, displayName: node.displayName, unreadItemCount: node.unreadItemCount, totalItemCount: node.totalItemCount, path });
+      }
+      if (node.children.length > 0) walk(node.children, path);
+    }
+  }
+
+  walk(tree, "");
+  return matches;
+}
