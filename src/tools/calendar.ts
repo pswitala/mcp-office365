@@ -16,11 +16,12 @@ export const calendarToolDefinitions = [
     description: "List calendar events in a date range.",
     schema: z.object({
       alias: z.string().describe("Mailbox alias"),
-      start: z.string().describe("Start datetime in ISO 8601 (e.g. 2024-01-01T00:00:00)"),
-      end: z.string().describe("End datetime in ISO 8601"),
+      start: z.string().describe("Start datetime in ISO 8601; offset honored (e.g. 2024-01-01T00:00:00+02:00 or 2024-01-01T00:00:00Z)"),
+      end: z.string().describe("End datetime in ISO 8601; offset honored (e.g. 2024-01-01T00:00:00+02:00 or 2024-01-01T00:00:00Z)"),
       calendarId: z.string().optional().describe("Calendar ID (omit for default calendar)"),
       top: z.number().int().min(1).max(100).optional().default(25),
       pageToken: z.string().optional(),
+      timeZone: z.string().optional().describe("IANA timezone for returned event times (e.g. Europe/Warsaw); defaults to UTC"),
     }),
     handler: async (args: {
       alias: string;
@@ -29,6 +30,7 @@ export const calendarToolDefinitions = [
       calendarId?: string;
       top?: number;
       pageToken?: string;
+      timeZone?: string;
     }) => {
       const result = await listEvents(args.alias, {
         start: args.start,
@@ -36,6 +38,7 @@ export const calendarToolDefinitions = [
         calendarId: args.calendarId,
         top: args.top,
         pageToken: args.pageToken,
+        timeZone: args.timeZone,
       });
       return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
     },

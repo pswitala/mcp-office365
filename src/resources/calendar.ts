@@ -9,8 +9,8 @@ function todayRange(): { start: string; end: string } {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   return {
-    start: start.toISOString().replace("Z", ""),
-    end: end.toISOString().replace("Z", ""),
+    start: start.toISOString(),
+    end: end.toISOString(),
   };
 }
 
@@ -19,8 +19,8 @@ function weekRange(): { start: string; end: string } {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
   return {
-    start: start.toISOString().replace("Z", ""),
-    end: end.toISOString().replace("Z", ""),
+    start: start.toISOString(),
+    end: end.toISOString(),
   };
 }
 

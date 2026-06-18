@@ -21,6 +21,26 @@ export interface ListEventsResult {
 const EVENT_SELECT =
   "id,subject,start,end,location,isAllDay,organizer,attendees,isCancelled,webLink";
 
+/**
+ * Normalizes an ISO 8601 datetime to UTC ("...Z") form for use in Graph query
+ * parameters. The Microsoft Graph client does NOT URL-encode query values
+ * (see GraphRequest.createQueryString), so a literal "+" in an offset such as
+ * "+02:00" reaches the server decoded as a space and corrupts the datetime.
+ * Converting to the equivalent UTC instant honors the offset and avoids "+"
+ * entirely. A datetime with no timezone designator is treated as UTC.
+ */
+function toGraphUtc(value: string): string {
+  const trimmed = value.trim();
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(trimmed);
+  const d = new Date(hasTz ? trimmed : `${trimmed}Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(
+      `Invalid datetime: "${value}". Use ISO 8601, e.g. 2026-01-01T00:00:00Z or 2026-01-01T00:00:00+02:00.`
+    );
+  }
+  return d.toISOString();
+}
+
 function toSummary(e: Record<string, unknown>): EventSummary {
   const start = e["start"] as { dateTime?: string; date?: string } | undefined;
   const end = e["end"] as { dateTime?: string; date?: string } | undefined;
@@ -45,18 +65,27 @@ function toSummary(e: Record<string, unknown>): EventSummary {
 
 export async function listEvents(
   alias: string,
-  opts: { start: string; end: string; calendarId?: string; top?: number; pageToken?: string }
+  opts: { start: string; end: string; calendarId?: string; top?: number; pageToken?: string; timeZone?: string }
 ): Promise<ListEventsResult> {
-  const { start, end, calendarId, top = 25, pageToken } = opts;
-  const limit = Math.min(top, 100);
+  const { start, end, calendarId, top = 25, pageToken, timeZone = "UTC" } = opts;
 
-  const base = calendarId ? `/me/calendars/${calendarId}/events` : "/me/events";
-  let url = pageToken ?? `${base}?$select=${EVENT_SELECT}&$top=${limit}&$orderby=start/dateTime asc&$filter=start/dateTime ge '${start}' and end/dateTime le '${end}'`;
-
-  const res = await graphGet<{ value: Record<string, unknown>[]; "@odata.nextLink"?: string }>(
-    alias,
-    url
-  );
+  type CalendarViewResponse = { value: Record<string, unknown>[]; "@odata.nextLink"?: string };
+  let res: CalendarViewResponse;
+  if (pageToken) {
+    res = await graphGet<CalendarViewResponse>(alias, pageToken);
+  } else {
+    const base = calendarId ? `/me/calendars/${calendarId}/calendarView` : "/me/calendarView";
+    res = await graphGet<CalendarViewResponse>(alias, base, {
+      query: {
+        startDateTime: toGraphUtc(start),
+        endDateTime: toGraphUtc(end),
+        $select: EVENT_SELECT,
+        $top: Math.min(top, 100),
+        $orderby: "start/dateTime asc",
+      },
+      headers: { Prefer: `outlook.timezone="${timeZone}"` },
+    });
+  }
 
   return {
     events: res.value.map(toSummary),

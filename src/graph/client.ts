@@ -22,9 +22,20 @@ export async function getGraphClient(alias: string): Promise<Client> {
   });
 }
 
-export async function graphGet<T>(alias: string, path: string): Promise<T> {
+export async function graphGet<T>(
+  alias: string,
+  path: string,
+  opts?: { query?: Record<string, string | number>; headers?: Record<string, string> }
+): Promise<T> {
   const client = await getGraphClient(alias);
-  return withRetry(() => client.api(path).get() as Promise<T>);
+  return withRetry(() => {
+    let req = client.api(path);
+    if (opts?.query) req = req.query(opts.query);
+    if (opts?.headers) {
+      for (const [k, v] of Object.entries(opts.headers)) req = req.header(k, v);
+    }
+    return req.get() as Promise<T>;
+  });
 }
 
 export async function graphPost<T>(alias: string, path: string, body: unknown): Promise<T> {
